@@ -11,7 +11,7 @@ RUN apk add libreoffice \
     update-ms-fonts && \
     fc-cache -f
 
-RUN pip install Flask requests gevent
+RUN pip install Flask requests gevent PyPDF2
 COPY . $APP_HOME
 
 CMD ["python", "to-pdf.py"]

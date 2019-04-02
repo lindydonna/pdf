@@ -6,6 +6,7 @@ import tempfile
 from gevent.pywsgi import WSGIServer
 from flask import Flask, after_this_request, render_template, request, send_file
 from subprocess import call
+from PyPDF2 import PdfFileMerger, PdfFileReader
 
 UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = set(['doc', 'docx', 'xls', 'xlsx'])
@@ -29,8 +30,10 @@ def api():
     work_dir = tempfile.TemporaryDirectory()
     file_name = 'document'
     input_file_path = os.path.join(work_dir.name, file_name)
-    # Libreoffice is creating files with the same name but .pdf extension
-    output_file_path = os.path.join(work_dir.name, file_name + '.pdf')
+  
+    # Libreoffice creates files with the same name but .pdf extension
+    converted_file_path = os.path.join(work_dir.name, file_name + '.pdf')
+    output_file_path = os.path.join(work_dir.name, file_name + '.cover.pdf')
 
     if request.method == 'POST':
         # check if the post request has the file part
@@ -53,6 +56,13 @@ def api():
         del response
 
     convert_file(work_dir.name, input_file_path)
+
+    # add cover sheet pdf page
+    cover_file = './cover.pdf'
+    merger = PdfFileMerger()
+    merger.append(PdfFileReader(open(cover_file, 'rb')))
+    merger.append(PdfFileReader(open(converted_file_path, 'rb')))
+    merger.write(output_file_path)    
 
     @after_this_request
     def cleanup(response):
