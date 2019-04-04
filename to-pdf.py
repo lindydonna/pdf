@@ -18,6 +18,8 @@ app = Flask(__name__)
 def convert_file(output_dir, input_file):
     call('libreoffice --headless --convert-to pdf --outdir %s %s ' %
          (output_dir, input_file), shell=True)
+    return add_cover(input_file)
+    # return '.pdf'
 
 
 def allowed_file(filename):
@@ -30,10 +32,6 @@ def api():
     work_dir = tempfile.TemporaryDirectory()
     file_name = 'document'
     input_file_path = os.path.join(work_dir.name, file_name)
-  
-    # Libreoffice creates files with the same name but .pdf extension
-    converted_file_path = os.path.join(work_dir.name, file_name + '.pdf')
-    output_file_path = os.path.join(work_dir.name, file_name + '.cover.pdf')
 
     if request.method == 'POST':
         # check if the post request has the file part
@@ -55,21 +53,29 @@ def api():
             shutil.copyfileobj(response.raw, file)
         del response
 
-    convert_file(work_dir.name, input_file_path)
-
-    # add cover sheet pdf page
-    cover_file = './cover.pdf'
-    merger = PdfFileMerger()
-    merger.append(PdfFileReader(open(cover_file, 'rb')))
-    merger.append(PdfFileReader(open(converted_file_path, 'rb')))
-    merger.write(output_file_path)    
+    extension = convert_file(work_dir.name, input_file_path)
+    output_file_path = os.path.join(work_dir.name, file_name + extension)
 
     @after_this_request
     def cleanup(response):
         work_dir.cleanup()
         return response
- 
+
     return send_file(output_file_path, mimetype='application/pdf')
+
+
+def add_cover(input_path):
+    extension = '.cover.pdf'
+    output_file_path = input_path + extension
+
+    # add cover sheet pdf page
+    cover_file = './cover.pdf'
+    merger = PdfFileMerger()
+    merger.append(PdfFileReader(open(cover_file, 'rb')))
+    merger.append(PdfFileReader(open(input_path + '.pdf', 'rb')))
+    merger.write(output_file_path)
+
+    return extension
 
 
 if __name__ == "__main__":
