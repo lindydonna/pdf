@@ -2,6 +2,9 @@ import os
 import shutil
 import requests
 import tempfile
+import urllib.request
+import json
+import sys
 
 from gevent.pywsgi import WSGIServer
 from flask import Flask, after_this_request, render_template, request, send_file
@@ -12,7 +15,6 @@ UPLOAD_FOLDER = '/tmp'
 ALLOWED_EXTENSIONS = set(['doc', 'docx', 'xls', 'xlsx'])
 
 app = Flask(__name__)
-
 
 # Convert using Libre Office
 def convert_file(output_dir, input_file):
@@ -46,7 +48,7 @@ def api():
     if request.method == 'GET':
         url = request.args.get('url', type=str)
         if not url:
-            return render_template('index.html')
+            return render_template('index.html', service=service_name)
         # Download from URL
         response = requests.get(url, stream=True)
         with open(input_file_path, 'wb') as file:
@@ -74,10 +76,39 @@ def add_cover(input_path):
     merger.append(PdfFileReader(open(cover_file, 'rb')))
     merger.append(PdfFileReader(open(input_path + '.pdf', 'rb')))
     merger.write(output_file_path)
-
     return extension
+    
+# Detect if we're running on Cloud Run, Cloud Run on GKE, or Knative
+@app.route('/metadata', methods=['GET'])
+def detect_service():
+    url = 'http://metadata.google.internal/computeMetadata/v1/instance/'
+    res = response(url)
+    if res:
+        res = res.decode('utf-8')
+        print('got response!', res, file=sys.stdout)
+        counter = len(res.split('\n'))
+        print('counter value ', counter, file=sys.stdout)
+        if counter > 4:
+            return 'Cloud Run on GKE'
+        if counter > 0:
+            return 'Cloud Run'
+    print('no data found', file=sys.stdout)
+    return 'Knative'
 
+def response(url):
+    try:
+        opener = urllib.request.build_opener()
+        opener.addheaders = [('Metadata-Flavor', 'Google'), ('Accepts', 'application/json')]
+        urllib.request.install_opener(opener)
+        response = urllib.request.urlopen(url)
+        return response.read()
+    except urllib.error.URLError as e:        
+        return b''
+
+service_name = 'Knative'
 
 if __name__ == "__main__":
+    service_name = detect_service()
+    print('PDF service has started up.', file=sys.stdout)
     http_server = WSGIServer(('', int(os.environ.get('PORT', 8080))), app)
     http_server.serve_forever()
